@@ -1,71 +1,142 @@
 <?php
-
 session_start();
-
-ob_start();
 
 include 'conexao.php';
 
-    $arquivo = $_FILES['arquivo'];
+ob_start();
 
-        $linhasImportadas = 0;
-        $linhasNaoImportadas = 0;
-        $usuariosNaoImportados = "";
-        $primeiraLinha = true;
+$arquivo = $_FILES['arquivo'];
 
-    if($arquivo['type'] == "text/csv"){
-        $dadosArquivo = fopen($arquivo['tmp_name'], "r");
-        
-        while($linha = fgetcsv($dadosArquivo, 30000, ";")){
-            if($primeiraLinha){
-                $primeiraLinha = false;
-                continue;
-            }
-            $queryUsuario = "INSERT INTO tblclientes(idCliente, statusPg, vencimentoPg, valorAberto, nomeCliente, valorRecebido, dataPg, prevPagamento) VALUES (:idCliente, :statusPg, :vencimentoPg, :valorAberto, :nomeCliente, :valorRecebido, :dataPg, :prevPagamento)";
-            
-  
-            $importaUsuario = $conn->prepare($queryUsuario);
-            $importaUsuario->bindValue('idCliente', ($linha[0] ?? "NULL"));
-            $importaUsuario->bindValue('statusPg', ($linha[1] ?? "NULL"));
+$linhasImportadas = 0;
+$linhasNaoImportadas = 0;
+$usuariosNaoImportados = [];
+$primeiraLinha = true;
 
-                    //  Faço a formatação das datas para ler no banco de dados.
-                    $vencimentoPg = $linha[2] ? DateTime::createFromFormat('d/m/Y', $linha[2])->format('Y-m-d') : null;
-                        $importaUsuario->bindValue('vencimentoPg', $vencimentoPg);      
-            
-            $importaUsuario->bindValue('valorAberto', ($linha[3] ?? "NULL"));
-     
-            $importaUsuario->bindValue('nomeCliente', ($linha[4] ?? "NULL"));
+function findOrCreateClient($id, $name)
+{
+    global $conn;
 
-            $importaUsuario->bindValue('valorRecebido', ($linha[5] ?? "NULL"));
-                     //  Faço a formatação das datas para ler no banco de dados.
-                    $dataPg = $linha[6] ? DateTime::createFromFormat('d/m/Y', $linha[6])->format('Y-m-d') : null;
-                        $importaUsuario->bindValue('dataPg', $dataPg);
-                        
-                    //  Faço a formatação das datas para ler no banco de dados.
-                        $prevPagamento = $linha[7] ? DateTime::createFromFormat('d/m/Y', $linha[7])->format('Y-m-d') : null;
-                      $importaUsuario->bindValue('prevPagamento', $prevPagamento);
+    $query = "SELECT * FROM clients WHERE id = :id";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue('id', $id);
+    $stmt->execute();
 
-            $importaUsuario->execute();
-
-            if($importaUsuario->rowCount()){
-                $linhasImportadas++;                
-            }else{
-                $linhasNaoImportadas++;
-                $usuariosNaoImportados = $usuariosNaoImportados . "," ($linha[0] ?? "NULL");
-            }
-        }
-
-        if(!empty($usuariosNaoImportados)){
-            $usuariosNaoImportados = "Usuários não importados: $usuariosNaoImportados.";
-        }
-
-        header("Location: consultaCliente.php");
-        
-        echo "$linhasImportadas linhas importadas, $linhasNaoImportadas linhas não importadas. $usuariosNaoImportados";
-
-    }else{
-    
-        echo "Arquivo não é do tipo CSV!";
+    $client_id = $stmt->fetchObject();
+    if ($client_id) {
+        return $client_id;
     }
 
-?>
+    $query = "INSERT INTO clients(id, name) VALUES(:id, :name)";
+    $stmt = $conn->prepare($query);
+
+    if ($stmt->execute([':id' => $id, ':name' => $name])) {
+        return $conn->lastInsertId();
+    }
+
+    return null;
+}
+
+function dateToTimestamp($date)
+{
+    // $date = DateTime::createFromFormat('d/m/Y', $date);
+    $date = strtotime($date);
+    return date('Y-m-d H:i:s', $date);
+}
+
+function convertAmount($value)
+{
+    $value = str_replace("R$", '', $value);
+    return floatval(trim($value));
+}
+
+function slugify($string)
+{
+    $string = strtolower($string);
+    $string = preg_replace('/[^a-z0-9\s-]/', '', $string);
+    $string = str_replace(' ', '-', $string);
+    $string = preg_replace('/-+/', '-', $string);
+    $string = trim($string, '-');
+
+    return $string;
+}
+
+function getPaymentStatus()
+{
+    global $conn;
+
+    $query = "SELECT * FROM payment_status";
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $formattedArray = [];
+    foreach ($result as $row) {
+        $formattedArray[slugify($row['name'])] = $row['id'];
+    }
+
+    return $formattedArray;
+}
+
+if ($arquivo['type'] == "text/csv") {
+    $dadosArquivo = fopen($arquivo['tmp_name'], "r");
+    $paymentStatus = getPaymentStatus();
+
+    while ($linha = fgetcsv($dadosArquivo, 30000, ";")) {
+
+        if ($primeiraLinha) {
+            $primeiraLinha = false;
+            continue;
+        }
+
+        $client_id = findOrCreateClient($linha[0], $linha[4]);
+        if (!$client_id) {
+            // Não criou/encontrou o cliente, precisa fazer controle aqui.
+            $linhasNaoImportadas++;
+            $usuariosNaoImportados[] = $linha[0] ?? "NULL";
+            continue;
+        }
+
+        $query = "INSERT 
+            INTO clients_payments(client_id, status_id, maturity, amount, paid_amount, paid_at, forecast_pay) 
+            VALUES(:client_id, :status_id, :maturity, :amount, :paid_amount, :paid_at), :forecast_pay";
+
+        if (!isset($linha[1]) || !$linha[1]) {
+            // Não pode importar sem status
+            $linhasNaoImportadas++;
+            $usuariosNaoImportados[] = $linha[0] ?? "NULL";
+            continue;
+        }
+
+        $status_id = $paymentStatus[slugify($linha[1])];
+        $maturity = isset($linha[2]) && $linha[2] ? dateToTimestamp($linha[2]) : null;
+        $amount = isset($linha[3]) && $linha[3] ? convertAmount($linha[3]) : null;
+        $paid_amount = isset($linha[5]) && $linha[5] ? convertAmount($linha[5]) : null;
+        $paid_at = isset($linha[7]) && $linha[7] ? dateToTimestamp($linha[7]) : null;
+
+        $stmt = $conn->prepare($query);
+        $result = $stmt->execute([
+            ':client_id' => $client_id,
+            ':status_id' => $status_id,
+            ':maturity' => $maturity,
+            ':amount' => $amount,
+            ':paid_amount' => $paid_amount,
+            ':paid_at' => $paid_at,
+            'forecast_pay' => $forecast_pay
+        ]);
+
+        if ($result) {
+            $linhasImportadas++;
+            continue;
+        }
+
+        $linhasNaoImportadas++;
+        $usuariosNaoImportados[] = $linha[0] ?? "NULL";
+    }
+
+    $_SESSION['msg'] = "$linhasImportadas linhas importadas, $linhasNaoImportadas linhas não importadas. " . implode(",", $usuariosNaoImportados);
+} else {
+    $_SESSION['msg'] = "Arquivo não é do tipo CSV!";
+}
+
+header("Location: consultaCliente.php");
