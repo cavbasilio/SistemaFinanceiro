@@ -64,22 +64,23 @@ require_once('conexao.php');
 
   if ($filtraRecebido) {
 
-    if (in_array('1', $filtraRecebido)) {
+    if (in_array('Recebido', $filtraRecebido)) {
       // Adiciona o where para o 'recebido'
+
       $params = [];
       if (!empty($valorStatusPagamento)) {
-        $where .= 'AND status_id = :status_id';
-        $params['1'] = $valorStatusPagamento;
+        $where .= 'AND statusPg = :statusPg';
+        $params['Recebido'] = $valorStatusPagamento;
       }
     }
 
-    if (in_array('2', $filtraRecebido)) {
+    if (in_array('A Receber', $filtraRecebido)) {
       // Adiciona o where para o 'a receber'
       $where = '';
       $params = [];
       if (isset($valorStatusPagamento)) {
-        $where .= 'AND status_id = :status_id';
-        $params['2'] = $valorStatusPagamento;
+        $where .= 'AND statusPg = :statusPg';
+        $params['A Receber'] = $valorStatusPagamento;
       }
     }
   }
@@ -89,16 +90,16 @@ require_once('conexao.php');
   $stmt->execute($params);
 
   $dados = $stmt->fetchAll(PDO::FETCH_ASSOC);
-  var_dump($dados);
   ?>
 
-  <!--<form method="POST" action="processa.php" enctype="multipart/form-data">
+  </form>
+ <form method="POST" action="processa.php" enctype="multipart/form-data">
       <span class="filtraNome">Nome:</span>
       <input type="text"  name="nomeaa" placeholder="Digite o nome...">
       <span class="filtraNome">ID:</span>
       <input type="text" name="id" placeholder="Digite o ID...">
       <input type="submit" value="Enviar">
-</form>-->
+</form>
 
   <form method="POST" action="processa.php" enctype="multipart/form-data">
 
@@ -127,14 +128,13 @@ require_once('conexao.php');
         <th scope="col">Previsão de Pagamento</th>
         <th scope="col">Ações</th>
       </tr>
-      
     </thead>
     <?php if (count($dados) == 0) : ?>
       <tr>
         <td colspan="8" style="text-align: center;">Nenhum registro encontrado</td>
       </tr>
-    <? else : ?>
-      <?php foreach ($dados as $payment => $value):?>
+    <?php else : ?>
+      <?php foreach ($dados as $payment) : ?>
         <tr>
           <td><?php echo $payment['id']; ?></td>
           <td><?php echo $payment['status_id']; ?></td>
@@ -143,21 +143,23 @@ require_once('conexao.php');
           <td><?php echo $payment['client_id']; ?></td>
           <td><?php echo $payment['paid_amount']; ?></td>
           <td><?php echo $payment['paid_at']; ?></td>
-          <td><?php echo $payment['forecast_pay'];?></td>
           <td>
-            <td><a class="btn btn-warning" href="editaCliente_Query.php?id=<?php echo $payment['id'] ?>" role="button"><i class="fa-regular fa-pen-to-square"></i>&nbsp;Editar</a></td>
-           <td> <a class="btn btn-info" href="atualPagam_Query.php?id=<?php echo $payment['id'] ?>" role="button"><i class="fa-regular fa-pen-to-square"></i>&nbsp;Atualiza Prev.</a></td>
-            <td><a class="btn btn-danger btn-sm" href="deletaCliente.php?id=<?php echo $payment['id'] ?>" role="button"><i class="far-fa-trash-alt"></i>&nbsp;Excluir</a></td>
+            <a class="btn btn-warning" href="editaCliente_Query.php?id=<?php echo $payment['id'] ?>" role="button"><i class="fa-regular fa-pen-to-square"></i>&nbsp;Editar</a>
+            <a class="btn btn-info" href="atualPagam_Query.php?id=<?php echo $payment['id'] ?>" role="button"><i class="fa-regular fa-pen-to-square"></i>&nbsp;Atualiza Prev.</a>
+            <a class="btn btn-danger btn-sm" href="deletaCliente.php?id=<?php echo $payment['id'] ?>" role="button"><i class="far-fa-trash-alt"></i>&nbsp;Excluir</a>
           </td>
         </tr>
       <?php endforeach; ?>
     <?php endif; ?>
-  </tr>
-</table>
-</table>
+
+
+    </tr>
+  </table>
+  </table>
 
   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.7/dist/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 </body>
+
 </html>
