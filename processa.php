@@ -12,7 +12,7 @@ $linhasNaoImportadas = 0;
 $usuariosNaoImportados = [];
 $primeiraLinha = true;
 
-function findOrCreateClient($id, $name)
+function findOrCreateCrient($id, $name)
 {
     global $conn;
 
@@ -21,16 +21,16 @@ function findOrCreateClient($id, $name)
     $stmt->bindValue('id', $id);
     $stmt->execute();
 
-    $client_id = $stmt->fetchObject();
-    if ($client_id) {
-        return $client_id;
+    $client = $stmt->fetchObject();
+    if ($client) {
+        return $client;
     }
 
     $query = "INSERT INTO clients(id, name) VALUES(:id, :name)";
     $stmt = $conn->prepare($query);
 
     if ($stmt->execute([':id' => $id, ':name' => $name])) {
-        return $conn->lastInsertId();
+        return $stmt->fetchObject();
     }
 
     return null;
@@ -89,8 +89,8 @@ if ($arquivo['type'] == "text/csv") {
             continue;
         }
 
-        $client_id = findOrCreateClient($linha[0], $linha[4]);
-        if (!$client_id) {
+        $client = findOrCreateCrient($linha[0], $linha[4]);
+        if (!$client) {
             // Não criou/encontrou o cliente, precisa fazer controle aqui.
             $linhasNaoImportadas++;
             $usuariosNaoImportados[] = $linha[0] ?? "NULL";
@@ -98,8 +98,8 @@ if ($arquivo['type'] == "text/csv") {
         }
 
         $query = "INSERT 
-            INTO clients_payments(client_id, status_id, maturity, amount, paid_amount, paid_at, forecast_pay) 
-            VALUES(:client_id, :status_id, :maturity, :amount, :paid_amount, :paid_at), :forecast_pay";
+            INTO clients_payments(client_id, status_id, maturity, amount, paid_amount, paid_at) 
+            VALUES(:client_id, :status_id, :maturity, :amount, :paid_amount, :paid_at)";
 
         if (!isset($linha[1]) || !$linha[1]) {
             // Não pode importar sem status
@@ -116,13 +116,12 @@ if ($arquivo['type'] == "text/csv") {
 
         $stmt = $conn->prepare($query);
         $result = $stmt->execute([
-            ':client_id' => $client_id,
+            ':client_id' => $client->id,
             ':status_id' => $status_id,
             ':maturity' => $maturity,
             ':amount' => $amount,
             ':paid_amount' => $paid_amount,
             ':paid_at' => $paid_at,
-            'forecast_pay' => $forecast_pay
         ]);
 
         if ($result) {
@@ -134,9 +133,10 @@ if ($arquivo['type'] == "text/csv") {
         $usuariosNaoImportados[] = $linha[0] ?? "NULL";
     }
 
-    $_SESSION['msg'] = "$linhasImportadas linhas importadas, $linhasNaoImportadas linhas não importadas. " . implode(",", $usuariosNaoImportados);
-} else {
-    $_SESSION['msg'] = "Arquivo não é do tipo CSV!";
-}
+    header("Location: consultaCliente.php");
 
-header("Location: consultaCliente.php");
+    echo "$linhasImportadas linhas importadas, $linhasNaoImportadas linhas não importadas. " . implode(",", $usuariosNaoImportados);
+} else {
+
+    echo "Arquivo não é do tipo CSV!";
+}
